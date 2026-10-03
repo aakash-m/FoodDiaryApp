@@ -31,7 +31,8 @@ Patients log their meals, water and exercise every day, then share a professiona
 
 ## 4. Architecture
 - Client only, no server. Business logic in pure TS modules (`src/lib/…`) so it can be unit tested. UI lives in `src/app/` (routes) and `src/components/`.
-- **Candidate modules (versions to confirm via `npx expo install`):** `expo-sqlite`, `expo-notifications`, `expo-image-picker`, `expo-image-manipulator`, `expo-file-system` (new File/Directory API, plus `legacy` StorageAccessFramework for the folder picker), `expo-sharing`, `expo-intent-launcher` (open .docx), `expo-print` (HTML→PDF export), `docx` (JS .docx builder), `fflate` or `jszip` (ZIP), a date picker (prefer `@expo/ui`, already installed).
+- **Modules:** installed and verified in Phase 0: `expo-file-system` 57 (new File/Directory API incl. `Directory.pickDirectoryAsync`), `expo-notifications`, `expo-sharing`, `expo-intent-launcher` (open .docx), `expo-dev-client`, `docx` 9.8.1, `fflate` (ZIP). Still to add: `expo-sqlite`, `expo-image-picker`, `expo-image-manipulator`, `expo-print` (HTML→PDF export), a date picker (prefer `@expo/ui`, already installed).
+- **Runtime:** a development build, not Expo Go (Expo Go can't load `expo-notifications` in SDK 57). EAS project `@aaki-m/FoodDiaryApp`, Android package `com.aakashmakhija.fooddiary`, profiles `development` and `preview` (APK) in `eas.json`.
 - **Report:** a single builder turns DB rows into a `ReportModel`. That one model renders both the in-app preview and the .docx (and the "export all" PDF via HTML), so the three outputs always match.
 
 ## 5. Notifications & async (no server, local notifications only)
@@ -53,10 +54,10 @@ Patients log their meals, water and exercise every day, then share a professiona
 10. Tests: Jest (jest-expo) for completeness rules, ISO week labels, ReportModel/docx builder, reminder schedule computation, and backup serialise/restore. Plus a manual Android device checklist. Lint and tsc must pass.
 
 ## OPEN RISKS / unknowns
-- **SAF folder access in SDK 57:** the new `expo-file-system` API documents no directory picker. The legacy `StorageAccessFramework.requestDirectoryPermissionsAsync` exists. Need to confirm that permission persists across restarts and that large binary writes are fast enough (they may go through base64).
+- ~~SAF folder access in SDK 57~~ resolved in Phase 0: `Directory.pickDirectoryAsync` keeps access across restart and reboot. **New:** `FileHandle` on SAF files breaks after a GC (expo-file-system bug). Always stage in `Paths.cache` and `copy()` to/from the folder. Worth reporting upstream.
 - **"Keep all" backups:** each ZIP is a full snapshot with photos, so the folder could reach GBs after months. The user must manage it (show total size in Settings).
-- **ZIP/docx memory on low-end phones:** a 7-day report holds up to 245 photos. Mitigate with resizing and streaming/chunked building, and measure on a real device.
-- **`docx` library in Hermes/RN:** needs `Packer.toBase64String` (no Node Buffer/streams). Verify early with a spike.
+- **ZIP/docx time and memory on low-end phones:** worst-case report was 20 s / 9.4 MB in dev mode on the emulator; a 300 MB backup took 29 s to write and 95 s to restore. Show progress UI, stream backups, and measure on a real device in release mode.
+- ~~`docx` library in Hermes/RN~~ resolved in Phase 0 (works; build a fresh `Document` per pack).
 - **Android OEM battery killers** (Xiaomi, Samsung, etc.) can delay or drop alarms. Consider a "disable battery optimisation" hint.
 - **Pre-scheduled end-of-day notifications go stale** if the app isn't opened for 7 or more days (content falls back to the generic text). That's acceptable.
 - **Opening the .docx needs an installed viewer** (Word, Docs, WPS). Fall back to a Share prompt.
@@ -74,8 +75,38 @@ Screens follow `design/app_design_ref.jpg` + `design/design_system_ref.jpg`, map
 
 Mock data lives in `src/mocks/` and in-memory state in `src/state/session.ts`; Phases 1–6 replace them with SQLite, real pickers, notifications, docx and backup. Shared UI kit: `src/components/ui/`.
 
+## Phase 0 results (03.10.2026, Android 12 emulator, Expo SDK 57, dev-mode JS)
+Spike code: branch `spike/phase-0`, `src/app/spike.tsx` (throwaway).
+
+**(a) .docx under Hermes — PASS (`docx` 9.8.1)**
+- `Packer.toArrayBuffer` and `Packer.toBase64String` both work; write the bytes with `File.write(Uint8Array)`, no base64 needed.
+- Word on Windows opened the Hermes-built files: worst case 7 days × 7 meals × 5 photos = 245 unique JPEGs → 9.4 MB, 49 pages. Build 9 s + pack 11 s (dev mode); release is faster.
+- **Rule:** create a fresh `Document` for every pack. Packing the same instance twice duplicates relationships/numbering and Word reports the file as corrupted.
+- `docx` de-duplicates identical image bytes (only one copy is stored).
+- Opening: `IntentLauncher.startActivityAsync(VIEW, { data: file.contentUri, flags: 1, type: docx-mime })`. Without a viewer it throws a catchable `ActivityNotFoundException` → fall back to Share. `Sharing.shareAsync` works (Gmail, Drive, Bluetooth, …).
+
+**(b) Backup folder (SAF) — PASS**
+- `Directory.pickDirectoryAsync()` (new API, undocumented on the docs page) takes a persistable URI permission. Access survived app restart **and** device reboot.
+- 20 MB `File.write(Uint8Array)` into the SAF folder: 1.1 s.
+- Android blocks picking the storage root and the `Download` root itself (Android 11+). Onboarding must ask the user to pick or create a subfolder (e.g. `Documents/FoodDiary`).
+
+**(c) ZIP — PASS with a workaround**
+- `fflate` `zipSync`/`unzipSync`: 50 photos in 0.2 s / 0.04 s, byte-identical. Fine for small archives only (whole archive in memory).
+- Real backups (hundreds of MB) must stream: `fflate` `Zip` + `ZipPassThrough` (store, JPEGs don't compress) → `FileHandle.writeBytes`. 300 MB / 1000 photos: 29 s.
+- **expo-file-system bug:** `File.open()` on a SAF `content://` file drops its `ParcelFileDescriptor`; after a GC the fd is closed and `writeBytes`/`readBytes` are rejected (~10 MB in). Workaround, verified: stream into `Paths.cache` (`file://`, RandomAccessFile-backed), then `await cacheFile.copy(safDirectory)` (300 MB in 2.6 s). Restore: `safFile.copy(cacheDir)` (2.3 s) then stream-unzip the local copy (300 MB in 95 s, dev mode). Archive verified on PC: 1001 entries, all CRCs OK.
+- Needs free space ≈ backup size for the staging copy; show a clear error when low.
+
+**(d) Exact DATE notifications — PASS (EAS development build)**
+- `expo-notifications` **cannot be imported in Expo Go (SDK 57, Android)**; it throws at import. All app work from now on runs in the development build (`eas.json` profile `development`, `npx expo start --dev-client`).
+- A `DATE` trigger scheduled 60 s ahead with the app in the background was posted **83 ms** after the due time (Android `when=` timestamp). `SCHEDULE_EXACT_ALARM` is declared in `app.json` and was auto-granted on Android 12.
+- Phase 5 to-dos: set a monochrome notification `icon` in the `expo-notifications` plugin (the default shows a placeholder ring). On Android 13+, `POST_NOTIFICATIONS` is a runtime prompt. On Android 14+, exact alarms are not pre-granted for new installs, so check and deep-link to settings. Force-stopping the app cancels its alarms (Android behaviour).
+
+**Not covered by Phase 0 (still open):** a real phone (OEM battery savers), Android 13/14 permission paths, opening the .docx in Word *on the phone* (emulator has no viewer; verified with Word on Windows), release-mode timings.
+
+**Decisions from Phase 0:** `docx` 9.8.1 + `fflate` (not jszip) · `Directory.pickDirectoryAsync` (new API) instead of the legacy StorageAccessFramework · stage large files in `Paths.cache` and `copy()` to/from SAF · development build for everything (EAS project `@aaki-m/FoodDiaryApp`, package `com.aakashmakhija.fooddiary`).
+
 ## Implementation phases (step by step, each ends with lint + tsc + tests green and a commit)
-**Phase 0 – De-risking spikes (throwaway branch):** (a) `docx` → `Packer.toBase64String` under Hermes with 1 embedded JPEG, opened in Word/Docs; (b) SAF folder pick → write a 20 MB binary → restart the app → write again (confirms persistence); (c) zip/unzip of photos with fflate; (d) a DATE-trigger notification at an exact time. Results decide the final library choices.
+**Phase 0 – De-risking spikes (throwaway branch) — DONE 03.10.2026, see Phase 0 results:** (a) `docx` → `Packer.toBase64String` under Hermes with 1 embedded JPEG, opened in Word/Docs; (b) SAF folder pick → write a 20 MB binary → restart the app → write again (confirms persistence); (c) zip/unzip of photos with fflate; (d) a DATE-trigger notification at an exact time. Results decide the final library choices.
 
 **Phase 1 – Foundation:** `npx expo install` the modules; dev-client setup and `eas.json` (development + preview APK profiles); `app.json` Android permissions (camera, POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM). `src/lib/db` (expo-sqlite schema, migrations with `PRAGMA user_version`, repositories). `src/lib/meals.ts` (meal-type constants), `src/lib/dates.ts` (dd.MM.yyyy, ISO week + "Weeks 40–41" label), `src/lib/completeness.ts`, `src/strings.ts`. Jest (jest-expo) setup with tests for dates and completeness.
 
