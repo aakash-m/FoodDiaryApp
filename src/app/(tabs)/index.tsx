@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   FlatList,
@@ -14,6 +15,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { avatar, mealFeed, recentActivities, type FeedMeal } from '@/mocks/homeFeed';
+import { todayKey } from '@/lib/dates';
+import { getDay } from '@/mocks/diary';
 import { colors, fonts, radii, spacing } from '@/theme/tokens';
 
 const MEAL_CARD_WIDTH = 163;
@@ -22,6 +25,12 @@ const MEAL_CARD_GAP = 16;
 export default function HomeFeedScreen() {
   const insets = useSafeAreaInsets();
   const [activeMeal, setActiveMeal] = useState(0);
+
+  const addFood = () => {
+    const today = todayKey();
+    const type = getDay(today).meals.find((m) => m.status === 'empty')?.type ?? 'breakfast';
+    router.push({ pathname: '/meal/[date]/[type]', params: { date: today, type } });
+  };
 
   const onMealScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / (MEAL_CARD_WIDTH + MEAL_CARD_GAP));
@@ -37,7 +46,7 @@ export default function HomeFeedScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Home Feed</Text>
         <View style={styles.headerActions}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Settings" hitSlop={8}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Settings" hitSlop={8} onPress={() => router.navigate('/settings')}>
             <Icon name="settings" size={28} color={colors.textPrimary} />
           </Pressable>
           <Image source={avatar} style={styles.headerAvatar} accessibilityLabel="Profile" />
@@ -81,6 +90,7 @@ export default function HomeFeedScreen() {
         <Text style={styles.logBody}>Add your daily food to your feed.</Text>
         <Pressable
           accessibilityRole="button"
+          onPress={addFood}
           style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
         >
           <Icon name="add" size={24} color={colors.textOnSage} />

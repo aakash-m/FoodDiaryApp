@@ -62,6 +62,18 @@ Patients log their meals, water and exercise every day, then share a professiona
 - **Opening the .docx needs an installed viewer** (Word, Docs, WPS). Fall back to a Share prompt.
 - **Exact-alarm permission on Android 14+** isn't granted by default for new installs and needs a settings deep link. Without it, reminders fall back to inexact.
 
+## UI (built with mock data, approved 03.10.2026)
+Screens follow `design/app_design_ref.jpg` + `design/design_system_ref.jpg`, mapped to this spec (no nutrition tracking, single description per meal, 4 tabs kept):
+- Onboarding 1–3 → `src/app/onboarding.tsx` (name, notifications, backup folder)
+- Daily goals → Progress tab (today n/9 ring, week progress, link to report)
+- Calendar → Mealtimes tab (month grid with completion dots + the day's 9 items + FAB)
+- Meal Editor 1 → `src/app/meal/[date]/[type].tsx`; Water/Exercise → `src/app/day/[date]/[field].tsx`
+- Meal Editor 2 → report range picker `src/app/report/index.tsx`; Weekly Report → `src/app/report/preview.tsx`
+- Settings main/sub-menus → Settings tab, `src/app/settings/{reminders,backup,profile}.tsx`
+- Lock Screen mockup: not applicable (system screen)
+
+Mock data lives in `src/mocks/` and in-memory state in `src/state/session.ts`; Phases 1–6 replace them with SQLite, real pickers, notifications, docx and backup. Shared UI kit: `src/components/ui/`.
+
 ## Implementation phases (step by step, each ends with lint + tsc + tests green and a commit)
 **Phase 0 – De-risking spikes (throwaway branch):** (a) `docx` → `Packer.toBase64String` under Hermes with 1 embedded JPEG, opened in Word/Docs; (b) SAF folder pick → write a 20 MB binary → restart the app → write again (confirms persistence); (c) zip/unzip of photos with fflate; (d) a DATE-trigger notification at an exact time. Results decide the final library choices.
 

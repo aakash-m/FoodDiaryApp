@@ -33,7 +33,9 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
             accessibilityLabel={label}
             style={styles.tab}
           >
-            <View style={[styles.indicator, focused && styles.indicatorActive]}>
+            <View style={styles.indicator}>
+              {/* Mounted only when focused: toggling backgroundColor on a rounded view loses the radius on Android. */}
+              {focused && <View style={styles.indicatorPill} />}
               <Icon
                 name={TAB_ICONS[route.name] ?? 'home'}
                 size={26}
@@ -67,7 +69,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  indicatorActive: {
+  indicatorPill: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: 18,
     backgroundColor: colors.tabIndicator,
   },
   label: {
