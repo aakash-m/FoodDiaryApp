@@ -6,13 +6,15 @@ Patients log their meals, water and exercise every day, then share a professiona
 ## 1. Product & scope
 - **Users:** individual patients (a few, via sideloaded APK). The **reader** of the .docx is their dietitian, so the document must look clean and print well.
 - **Platform:** **Android only** (development build or EAS APK; Expo Go is not targeted).
+- **Design:** sage palette and tokens in `src/theme/tokens.ts`, **Roboto** font (chosen over Google Sans to match the mockups), icons from `@expo/vector-icons`.
 - **Language:** English, dates **dd.MM.yyyy**, strings kept in one module (ready for i18n).
 - **In scope (v1):** daily log, photos, .docx report (≤7 days), in-app report preview, open/save/share, water reminder, end-of-day reminder, 7-day auto-backup (ZIP) plus restore, export of everything as PDF, onboarding, settings.
 - **Out of scope (v1):** accounts and cloud sync, iOS, web, multiple entries per meal slot, future-dated logs, Play Store release, other languages, structured nutrition data (calories etc.).
 
 ## 2. Core flows
 1. **Onboarding (first launch):** enter name → allow notifications (POST_NOTIFICATIONS, exact alarms) → pick the backup folder (SAF) → Home. Both reminders are ON by default.
-2. **Home = Day view:** today by default. A date strip with prev/next and a calendar picker for **any past day** (no future days). It shows 9 cards: 7 meals, Water, Exercise, plus a "**n/9 done**" indicator.
+2. **Navigation:** 4 bottom tabs: Home (Home Feed, see `design/Home_Feed_screen.jpg`), Progress, Mealtimes, Settings. Home's "Add food" opens the Day view.
+   **Mealtimes tab = Day view:** today by default. A date strip with prev/next and a calendar picker for **any past day** (no future days). It shows 9 cards: 7 meals, Water, Exercise, plus a "**n/9 done**" indicator.
 3. **Meal editor:** description (multi-line), up to **5 photos** (camera or gallery), **Skip** toggle. Skipping clears the description and photos (with a confirmation if they exist) and allows an optional **reason**.
 4. **Water / Exercise:** free-text fields.
 5. **Report:** pick a start date; the end date defaults to start+6 and can be shortened (max 7 days) → **in-app preview** → generate .docx → **Open** (external app via intent), **Save** (to the backup folder or a user-chosen folder), **Share** (share sheet).
@@ -67,7 +69,7 @@ Patients log their meals, water and exercise every day, then share a professiona
 
 **Phase 2 – Onboarding & settings:** settings repository and hook; `src/app/onboarding/*` (name → notifications → backup folder); gate in the root `_layout.tsx`; `src/app/settings.tsx`.
 
-**Phase 3 – Daily logging:** `src/app/index.tsx` Day view (date strip, calendar picker, 9 cards, n/9 indicator); `src/app/day/[date]/meal/[type].tsx` meal editor (description, skip + reason, photo grid ≤5); water/exercise editors; `src/lib/photos.ts` (pick or capture → resize to 1600px → copy to app storage → delete with entry).
+**Phase 3 – Daily logging:** wire the Home Feed (`src/app/(tabs)/index.tsx`, currently mock data from `src/mocks/homeFeed.ts`) to the database; `src/app/(tabs)/mealtimes.tsx` Day view (date strip, calendar picker, 9 cards, n/9 indicator); `src/app/day/[date]/meal/[type].tsx` meal editor (description, skip + reason, photo grid ≤5); water/exercise editors; `src/lib/photos.ts` (pick or capture → resize to 1600px → copy to app storage → delete with entry).
 
 **Phase 4 – Report:** `src/lib/report/model.ts` (DB → ReportModel, includes "Not logged" days); `src/app/report/index.tsx` (range picker, max 7 days) and `preview.tsx`; `src/lib/report/docx.ts` (header, per-day tables, 800px images); open via intent-launcher (content URI), save to folder, share via expo-sharing. Tests for the model and the docx builder (structure).
 
