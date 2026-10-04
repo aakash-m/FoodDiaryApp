@@ -1,11 +1,12 @@
 import type { ImageSourcePropType } from 'react-native';
 
 import { addDays, diffDays, todayKey, type DateKey } from '@/lib/dates';
-import { DAILY_ITEM_COUNT, MEAL_TYPES, type MealTypeKey } from '@/lib/meals';
+import { summarizeDay, type DaySummary, type MealStatus } from '@/lib/completeness';
+import { MEAL_TYPES, type MealTypeKey } from '@/lib/meals';
 
 // Deterministic placeholder diary used by the UI until the SQLite layer (Phase 1/3) exists.
 
-export type MealStatus = 'empty' | 'logged' | 'skipped';
+export type { DaySummary, MealStatus };
 
 export type MockMeal = {
   type: MealTypeKey;
@@ -96,15 +97,8 @@ function emptyDay(date: DateKey): MockDay {
   };
 }
 
-export type DaySummary = { logged: number; skipped: number; missing: number; done: number; total: number };
-
-/** Completeness rules from PLAN.md: skipped counts as done; water/exercise need text. */
 export function summarize(day: MockDay): DaySummary {
-  const logged = day.meals.filter((m) => m.status === 'logged').length;
-  const skipped = day.meals.filter((m) => m.status === 'skipped').length;
-  const extras = (day.water.trim() ? 1 : 0) + (day.exercise.trim() ? 1 : 0);
-  const done = logged + skipped + extras;
-  return { logged, skipped, missing: DAILY_ITEM_COUNT - done, done, total: DAILY_ITEM_COUNT };
+  return summarizeDay(day);
 }
 
 export function isFuture(date: DateKey): boolean {

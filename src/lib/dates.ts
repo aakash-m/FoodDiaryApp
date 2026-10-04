@@ -17,6 +17,11 @@ export function todayKey(): DateKey {
   return toKey(new Date());
 }
 
+/** True for a real calendar date written as YYYY-MM-DD (rejects 2026-02-30, 2026-1-5, …). */
+export function isDateKey(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && toKey(fromKey(value)) === value;
+}
+
 export function addDays(key: DateKey, days: number): DateKey {
   const d = fromKey(key);
   d.setDate(d.getDate() + days);

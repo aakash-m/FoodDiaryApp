@@ -10,6 +10,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { DbProvider } from '@/lib/db/DbProvider';
 import { colors } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -30,9 +31,9 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <>
+    <DbProvider>
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }} />
-    </>
+    </DbProvider>
   );
 }
