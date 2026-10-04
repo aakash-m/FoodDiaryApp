@@ -1,4 +1,4 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/Icon';
@@ -89,6 +89,23 @@ export function Dialog({
   );
 }
 
+/** Blocking progress dialog for long tasks (report generation, backups). */
+export function ProgressDialog({ visible, title, detail }: { visible: boolean; title: string; detail?: string }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => {}}>
+      <View style={styles.backdropCenter}>
+        <View style={[styles.dialog, styles.progress]} accessibilityRole="progressbar" accessibilityLabel={title}>
+          <ActivityIndicator size="large" color={colors.sage} />
+          <View style={styles.progressText}>
+            <Text style={styles.progressTitle}>{title}</Text>
+            {detail ? <Text style={styles.dialogMessage}>{detail}</Text> : null}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   backdropBottom: { flex: 1, backgroundColor: 'rgba(28,33,27,0.35)', justifyContent: 'flex-end' },
   backdropCenter: { flex: 1, backgroundColor: 'rgba(28,33,27,0.35)', justifyContent: 'center', padding: 28 },
@@ -100,5 +117,8 @@ const styles = StyleSheet.create({
   dialog: { backgroundColor: colors.background, borderRadius: 28, padding: 24 },
   dialogTitle: { fontFamily: fonts.regular, fontSize: 22, color: colors.textPrimary },
   dialogMessage: { marginTop: 12, fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: colors.textSecondary },
+  progress: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  progressText: { flex: 1 },
+  progressTitle: { fontFamily: fonts.medium, fontSize: 18, color: colors.textPrimary },
   dialogActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 22, flexWrap: 'wrap' },
 });
