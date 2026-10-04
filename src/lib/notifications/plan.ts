@@ -21,12 +21,28 @@ export type ReminderSettings = {
   waterEnd: string;
   endOfDayReminder: boolean;
   endOfDayTime: string;
+  backupOverdueReminder?: boolean;
+  /** ISO timestamp of the last backup, or null. */
+  lastBackupAt?: string | null;
+  /** ISO timestamp of onboarding; anchors the reminder when there is no backup yet. */
+  onboardedAt?: string | null;
+  hasBackupFolder?: boolean;
 };
+
+/** When the next backup is due: 7 days after the last one (or after onboarding). */
+export function backupDueAt(lastBackupAt: string | null | undefined, onboardedAt: string | null | undefined): number | null {
+  const anchor = lastBackupAt ?? onboardedAt;
+  if (!anchor) return null;
+  const t = Date.parse(anchor);
+  return Number.isNaN(t) ? null : t + BACKUP_INTERVAL_DAYS * DAY_MS;
+}
 
 export const WATER_INTERVAL_MINUTES = 120;
 /** End-of-day checks are pre-scheduled this many days ahead, so they still fire if the app isn't opened. */
 export const EOD_DAYS_AHEAD = 7;
-export const REMINDER_ID_PREFIXES = ['water-', 'eod-'] as const;
+export const REMINDER_ID_PREFIXES = ['water-', 'eod-', 'backup-'] as const;
+export const BACKUP_INTERVAL_DAYS = 7;
+const DAY_MS = 86_400_000;
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -104,6 +120,29 @@ export function planReminders(input: {
           url: '/mealtimes',
         });
       }
+    }
+  }
+
+  if (settings.backupOverdueReminder) {
+    const due = backupDueAt(settings.lastBackupAt, settings.onboardedAt);
+    if (due !== null) {
+      let at = due;
+      if (at <= now.getTime() + 60_000) {
+        // Already overdue: nudge at the next 10:00 rather than right away.
+        const next = new Date(now);
+        next.setHours(10, 0, 0, 0);
+        if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+        at = next.getTime();
+      }
+      plan.push({
+        id: 'backup-overdue',
+        title: 'Time to back up your diary',
+        body: settings.hasBackupFolder
+          ? 'Your last backup is more than a week old. Open Food Diary to back up now.'
+          : 'Choose a backup folder so Food Diary can keep a copy of your diary safe.',
+        trigger: { kind: 'date', at },
+        url: '/settings/backup',
+      });
     }
   }
 

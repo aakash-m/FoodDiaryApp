@@ -321,6 +321,12 @@ export async function saveDayText(
   );
 }
 
+/** First and last date with any entry, or null for an empty diary. */
+export async function getDiaryDateRange(db: Db): Promise<{ first: DateKey; last: DateKey } | null> {
+  const row = await db.first<{ first: string | null; last: string | null }>('SELECT MIN(date) AS first, MAX(date) AS last FROM day_log');
+  return row?.first && row.last ? { first: row.first, last: row.last } : null;
+}
+
 /** All photo file names referenced by the diary (backup and orphan clean-up). */
 export async function getAllPhotoFileNames(db: Db): Promise<string[]> {
   const rows = await db.all<{ file_name: string }>('SELECT file_name FROM photo ORDER BY file_name');

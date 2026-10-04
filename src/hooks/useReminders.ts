@@ -24,6 +24,7 @@ export function useReminderSync(): void {
   const settings = useSettings();
   const version = useDiaryVersion();
   const { onboarded, waterReminder, waterStart, waterEnd, endOfDayReminder, endOfDayTime } = settings;
+  const { backupOverdueReminder, lastBackupAt, onboardedAt, backupDirUri } = settings;
   const [resumeTick, setResumeTick] = useState(0);
 
   useEffect(() => {
@@ -34,7 +35,17 @@ export function useReminderSync(): void {
         const today = todayKey();
         const todayDay = await getDay(db, today);
         const plan = planReminders({
-          settings: { waterReminder, waterStart, waterEnd, endOfDayReminder, endOfDayTime },
+          settings: {
+            waterReminder,
+            waterStart,
+            waterEnd,
+            endOfDayReminder,
+            endOfDayTime,
+            backupOverdueReminder,
+            lastBackupAt,
+            onboardedAt,
+            hasBackupFolder: !!backupDirUri,
+          },
           now: new Date(),
           today,
           todayDay,
@@ -52,7 +63,21 @@ export function useReminderSync(): void {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [db, version, resumeTick, onboarded, waterReminder, waterStart, waterEnd, endOfDayReminder, endOfDayTime]);
+  }, [
+    db,
+    version,
+    resumeTick,
+    onboarded,
+    waterReminder,
+    waterStart,
+    waterEnd,
+    endOfDayReminder,
+    endOfDayTime,
+    backupOverdueReminder,
+    lastBackupAt,
+    onboardedAt,
+    backupDirUri,
+  ]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {

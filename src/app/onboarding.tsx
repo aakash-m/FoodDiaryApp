@@ -37,7 +37,7 @@ export default function OnboardingScreen() {
   }, [step]);
 
   const finish = async () => {
-    if (await update({ onboarded: true })) router.replace('/');
+    if (await update({ onboarded: true, onboardedAt: new Date().toISOString() })) router.replace('/');
   };
 
   const askNotifications = async () => {

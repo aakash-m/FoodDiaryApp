@@ -14,6 +14,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/ui/Button';
 import { getAllPhotoFileNames } from '@/lib/db/diaryRepo';
 import { DbProvider, useDb } from '@/lib/db/DbProvider';
+import { useAutoBackup } from '@/hooks/useAutoBackup';
 import { useReminderSync, useReminderTaps } from '@/hooks/useReminders';
 import { installNotificationHandler } from '@/lib/notifications/apply';
 import { cleanupOrphanPhotos } from '@/lib/photos';
@@ -46,6 +47,7 @@ function AppShell() {
   const db = useDb();
   useReminderSync();
   useReminderTaps();
+  useAutoBackup();
   useEffect(() => {
     SplashScreen.hideAsync();
     // Remove photo files left behind if the app was killed while editing a meal.

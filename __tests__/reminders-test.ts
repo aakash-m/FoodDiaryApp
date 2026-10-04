@@ -1,6 +1,6 @@
 import type { DayCompletenessInput } from '@/lib/completeness';
 import { MEAL_TYPES } from '@/lib/meals';
-import { joinList, parseTime, planReminders, reminderSignature, waterTimes, type ReminderSettings } from '@/lib/notifications/plan';
+import { backupDueAt, joinList, parseTime, planReminders, reminderSignature, waterTimes, type ReminderSettings } from '@/lib/notifications/plan';
 
 const SETTINGS: ReminderSettings = {
   waterReminder: true,
@@ -99,5 +99,36 @@ describe('planReminders', () => {
     expect(b.id).not.toBe(a.id);
     expect(reminderSignature(a)).toBe(reminderSignature({ ...a }));
     expect(reminderSignature(a)).not.toBe(reminderSignature({ ...a, body: 'x' }));
+  });
+});
+
+describe('backup overdue reminder', () => {
+  const base = { ...SETTINGS, waterReminder: false, endOfDayReminder: false, backupOverdueReminder: true, hasBackupFolder: true };
+
+  it('is due 7 days after the last backup (or onboarding)', () => {
+    expect(backupDueAt('2026-10-01T10:00:00.000Z', null)).toBe(Date.parse('2026-10-08T10:00:00.000Z'));
+    expect(backupDueAt(null, '2026-10-02T08:00:00.000Z')).toBe(Date.parse('2026-10-09T08:00:00.000Z'));
+    expect(backupDueAt(null, null)).toBeNull();
+  });
+
+  it('schedules the reminder at the due time', () => {
+    const [r] = planReminders({ settings: { ...base, lastBackupAt: '2026-10-01T10:00:00.000Z' }, now: at(9), today: TODAY, todayDay: emptyDay });
+    expect(r).toMatchObject({ id: 'backup-overdue', url: '/settings/backup', trigger: { kind: 'date', at: Date.parse('2026-10-08T10:00:00.000Z') } });
+  });
+
+  it('nudges at the next 10:00 when already overdue, and asks for a folder if none is set', () => {
+    const [r] = planReminders({
+      settings: { ...base, hasBackupFolder: false, lastBackupAt: '2026-09-01T10:00:00.000Z' },
+      now: at(12),
+      today: TODAY,
+      todayDay: emptyDay,
+    });
+    expect(r.trigger).toEqual({ kind: 'date', at: at(10, 0, '2026-10-05').getTime() });
+    expect(r.body).toMatch(/Choose a backup folder/);
+  });
+
+  it('is skipped when turned off or without any anchor', () => {
+    expect(planReminders({ settings: { ...base, backupOverdueReminder: false, lastBackupAt: '2026-10-01T10:00:00Z' }, now: at(9), today: TODAY, todayDay: emptyDay })).toEqual([]);
+    expect(planReminders({ settings: base, now: at(9), today: TODAY, todayDay: emptyDay })).toEqual([]);
   });
 });

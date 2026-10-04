@@ -20,6 +20,10 @@ export type AppSettings = {
   lastBackupAt: string | null;
   /** Last day the end-of-day notification was scheduled for (avoids duplicates). */
   lastEodScheduledFor: DateKey | null;
+  /** ISO timestamp when onboarding finished; anchors the first backup-overdue reminder. */
+  onboardedAt: string | null;
+  /** The user dismissed the battery-optimisation hint. */
+  batteryHintDismissed: boolean;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -34,6 +38,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backupDirUri: null,
   lastBackupAt: null,
   lastEodScheduledFor: null,
+  onboardedAt: null,
+  batteryHintDismissed: false,
 };
 
 const KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof AppSettings)[];
