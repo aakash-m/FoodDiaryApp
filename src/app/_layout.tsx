@@ -14,11 +14,14 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/ui/Button';
 import { getAllPhotoFileNames } from '@/lib/db/diaryRepo';
 import { DbProvider, useDb } from '@/lib/db/DbProvider';
+import { useReminderSync, useReminderTaps } from '@/hooks/useReminders';
+import { installNotificationHandler } from '@/lib/notifications/apply';
 import { cleanupOrphanPhotos } from '@/lib/photos';
 import { SettingsProvider } from '@/state/settings';
 import { colors, fonts, spacing } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
+installNotificationHandler();
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -41,6 +44,8 @@ export default function RootLayout() {
 /** Mounted once fonts, database and settings are ready, so the splash hides on a fully loaded screen. */
 function AppShell() {
   const db = useDb();
+  useReminderSync();
+  useReminderTaps();
   useEffect(() => {
     SplashScreen.hideAsync();
     // Remove photo files left behind if the app was killed while editing a meal.

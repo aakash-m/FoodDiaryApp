@@ -21,7 +21,8 @@
       "package": "com.aakashmakhija.fooddiary",
       "permissions": [
         "android.permission.SCHEDULE_EXACT_ALARM",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_EXACT_ALARM"
       ]
     },
     "web": {

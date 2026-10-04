@@ -1,8 +1,13 @@
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { ListRow } from '@/components/ui/ListRow';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Select, type SelectOption } from '@/components/ui/Select';
+import { Dialog } from '@/components/ui/Sheet';
+import { useNotificationAccess } from '@/hooks/useNotificationAccess';
+import { sendTestReminder, TEST_REMINDER_DELAY_S } from '@/lib/notifications/apply';
+import { openAppSettings, requestNotificationAccess } from '@/lib/notifications/permissions';
 import { useSettings, useUpdateSettings } from '@/state/settings';
 import { colors, fonts, spacing } from '@/theme/tokens';
 
@@ -22,6 +27,19 @@ const EOD_TIMES: SelectOption[] = ['20:00', '20:30', '21:00', '21:30', '22:00', 
 export default function RemindersScreen() {
   const s = useSettings();
   const updateSettings = useUpdateSettings();
+  const access = useNotificationAccess();
+  const [notice, setNotice] = useState<{ title: string; message: string; settings?: boolean } | null>(null);
+
+  const test = async () => {
+    const result = access === 'granted' ? 'granted' : await requestNotificationAccess();
+    if (result !== 'granted') {
+      setNotice({ title: 'Notifications are off', message: 'Allow notifications for Food Diary to receive reminders.', settings: true });
+      return;
+    }
+    await sendTestReminder();
+    setNotice({ title: 'Test reminder scheduled', message: `It will appear in about ${TEST_REMINDER_DELAY_S} seconds. You can leave the app.` });
+  };
+
   return (
     <ScrollView style={styles.screen}>
       <ScreenHeader title="Reminder times" />
@@ -49,6 +67,17 @@ export default function RemindersScreen() {
         icon="bell"
         label="Remind me when a backup is overdue"
         toggle={{ value: s.backupOverdueReminder, onChange: (v) => updateSettings({ backupOverdueReminder: v }) }}
+      />
+
+      <Text style={styles.group}>Check</Text>
+      <ListRow icon="bell" label="Send a test reminder" value={`Arrives in ${TEST_REMINDER_DELAY_S} seconds`} onPress={test} />
+
+      <Dialog
+        visible={!!notice}
+        title={notice?.title ?? ''}
+        message={notice?.message}
+        onClose={() => setNotice(null)}
+        actions={notice?.settings ? [{ label: 'Close' }, { label: 'Open settings', primary: true, onPress: () => void openAppSettings() }] : [{ label: 'OK', primary: true }]}
       />
     </ScrollView>
   );
