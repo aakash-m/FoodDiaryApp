@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { BatteryHint } from '@/components/BatteryHint';
 import { Icon } from '@/components/Icon';
 import { ListRow } from '@/components/ui/ListRow';
 import { LargeTitle } from '@/components/ui/ScreenHeader';
@@ -8,6 +9,7 @@ import { useNotificationAccess } from '@/hooks/useNotificationAccess';
 import { formatDate, toKey } from '@/lib/dates';
 import { openAppSettings, requestNotificationAccess } from '@/lib/notifications/permissions';
 import { useSettings, useUpdateSettings } from '@/state/settings';
+import { APP_VERSION } from '@/state/backupActions';
 import { colors, fonts, radii, spacing } from '@/theme/tokens';
 
 // "Settings Main" mockup: icon rows with toggles and chevrons.
@@ -35,6 +37,7 @@ export default function SettingsScreen() {
           </Text>
         </Pressable>
       )}
+      <BatteryHint />
       <View style={styles.list}>
         <ListRow icon="person" label="Profile" value={s.name || 'Add your name'} onPress={() => router.push('/settings/profile')} />
         <ListRow
@@ -51,7 +54,7 @@ export default function SettingsScreen() {
         />
         <ListRow icon="time" label="Reminder times" onPress={() => router.push('/settings/reminders')} />
         <ListRow icon="backup" label="Backup & restore" value={lastBackup} onPress={() => router.push('/settings/backup')} />
-        <ListRow icon="info" label="About" value="Food Diary 1.0.0" accessory="none" />
+        <ListRow icon="info" label="About" value={`Food Diary ${APP_VERSION} · data stays on this phone`} accessory="none" />
       </View>
     </ScrollView>
   );

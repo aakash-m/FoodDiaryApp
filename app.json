@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fooddiaryapp",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon"
     },
@@ -21,7 +21,8 @@
       "permissions": [
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.POST_NOTIFICATIONS",
-        "android.permission.USE_EXACT_ALARM"
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ]
     },
     "web": {

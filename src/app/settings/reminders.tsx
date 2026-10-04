@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { ListRow } from '@/components/ui/ListRow';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { BatteryHint } from '@/components/BatteryHint';
 import { Select, type SelectOption } from '@/components/ui/Select';
 import { Dialog } from '@/components/ui/Sheet';
 import { useNotificationAccess } from '@/hooks/useNotificationAccess';
@@ -43,6 +44,7 @@ export default function RemindersScreen() {
   return (
     <ScrollView style={styles.screen}>
       <ScreenHeader title="Reminder times" />
+      <BatteryHint />
       <Text style={styles.group}>Water reminder</Text>
       <ListRow
         icon="water"
