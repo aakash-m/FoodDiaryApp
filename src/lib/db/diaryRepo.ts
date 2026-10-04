@@ -189,7 +189,11 @@ async function writeMeal(tx: Db, date: DateKey, type: MealTypeKey, meal: Normali
   await touchDay(tx, date, now);
 
   if (meal.status === 'empty') {
-    if (existing) await tx.run('DELETE FROM meal_entry WHERE id = ?', existing.id);
+    // Delete photos explicitly: the cascade only works on connections with foreign keys enabled.
+    if (existing) {
+      await tx.run('DELETE FROM photo WHERE meal_entry_id = ?', existing.id);
+      await tx.run('DELETE FROM meal_entry WHERE id = ?', existing.id);
+    }
     return { meal: emptyMeal(type), removedFileNames };
   }
 

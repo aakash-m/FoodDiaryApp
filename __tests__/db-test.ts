@@ -9,6 +9,7 @@ import {
   getSettings,
   initDb,
   migrate,
+  repairOrphans,
   saveDayText,
   saveMeal,
   SCHEMA_VERSION,
@@ -178,6 +179,38 @@ describe('changing the meal type', () => {
 
   it('rejects an unknown source type', async () => {
     await expect(saveMeal(db, TODAY, 'lunch', meal('x'), { ...opts, fromType: 'brunch' })).rejects.toThrow(/Unknown meal type/);
+  });
+});
+
+describe('without foreign keys on the write connection', () => {
+  // expo-sqlite once ran transactions on a fresh connection without PRAGMA foreign_keys; writes must not
+  // rely on ON DELETE CASCADE.
+  let noFk: ReturnType<typeof createTestDb>;
+  beforeEach(async () => {
+    noFk = createTestDb({ foreignKeysInTransactions: false });
+    await initDb(noFk);
+  });
+  afterEach(() => noFk.close());
+
+  const orphans = () => noFk.all('SELECT p.id FROM photo p LEFT JOIN meal_entry m ON m.id = p.meal_entry_id WHERE m.id IS NULL');
+
+  it('leaves no orphaned photos when a meal moves or is cleared', async () => {
+    await saveMeal(noFk, TODAY, 'breakfast', meal('x', ['a.jpg']), opts);
+    await saveMeal(noFk, TODAY, 'lunch', meal('x', ['a.jpg']), { ...opts, fromType: 'breakfast' });
+    expect(await orphans()).toHaveLength(0);
+    await saveMeal(noFk, TODAY, 'lunch', meal(''), opts);
+    expect(await orphans()).toHaveLength(0);
+    expect(await noFk.all('SELECT * FROM photo')).toHaveLength(0);
+  });
+
+  it('repairOrphans removes rows left by older versions', async () => {
+    await noFk.exec('PRAGMA foreign_keys = OFF');
+    await noFk.run("INSERT INTO photo (id, meal_entry_id, file_name, sort_order, created_at) VALUES ('p', 'gone', 'x.jpg', 0, 'now')");
+    await noFk.run("INSERT INTO meal_entry (id, date, meal_type, status, updated_at) VALUES ('m', '2026-01-01', 'lunch', 'logged', 'now')");
+    await noFk.exec('PRAGMA foreign_keys = ON');
+    expect(await repairOrphans(noFk)).toBe(2);
+    expect(await noFk.all('SELECT * FROM photo')).toHaveLength(0);
+    expect(await noFk.all('SELECT * FROM meal_entry')).toHaveLength(0);
   });
 });
 

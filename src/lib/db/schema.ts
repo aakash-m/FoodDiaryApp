@@ -67,8 +67,21 @@ export async function migrate(db: Db): Promise<number> {
   return SCHEMA_VERSION;
 }
 
-/** Connection setup + migrations. PRAGMAs must run outside a transaction. */
+/**
+ * Removes rows whose parent is gone. Writes are FK-safe now, but versions before 04.10.2026 could
+ * leave orphaned photo rows when a meal moved to another meal type.
+ */
+export async function repairOrphans(db: Db): Promise<number> {
+  return db.transaction(async (tx) => {
+    const photos = await tx.run('DELETE FROM photo WHERE meal_entry_id NOT IN (SELECT id FROM meal_entry)');
+    const meals = await tx.run('DELETE FROM meal_entry WHERE date NOT IN (SELECT date FROM day_log)');
+    return photos.changes + meals.changes;
+  });
+}
+
+/** Connection setup, migrations and integrity repair. PRAGMAs must run outside a transaction. */
 export async function initDb(db: Db): Promise<void> {
   await db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   await migrate(db);
+  await repairOrphans(db);
 }

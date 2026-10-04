@@ -2,8 +2,11 @@ import { DatabaseSync } from 'node:sqlite';
 
 import type { Db, SqlValue } from '@/lib/db/types';
 
-/** In-memory SQLite (Node's built-in engine) behind the app's Db interface, for unit tests. */
-export function createTestDb(): Db & { close(): void } {
+/**
+ * In-memory SQLite (Node's built-in engine) behind the app's Db interface, for unit tests.
+ * `foreignKeysInTransactions: false` mimics a write connection without PRAGMA foreign_keys.
+ */
+export function createTestDb(opts: { foreignKeysInTransactions?: boolean } = {}): Db & { close(): void } {
   const raw = new DatabaseSync(':memory:');
   let inTransaction = false;
 
@@ -20,6 +23,7 @@ export function createTestDb(): Db & { close(): void } {
     transaction: async (fn) => {
       if (inTransaction) throw new Error('nested transactions are not supported');
       inTransaction = true;
+      if (opts.foreignKeysInTransactions === false) raw.exec('PRAGMA foreign_keys = OFF');
       raw.exec('BEGIN IMMEDIATE');
       try {
         const result = await fn(db);
@@ -30,6 +34,7 @@ export function createTestDb(): Db & { close(): void } {
         throw e;
       } finally {
         inTransaction = false;
+        if (opts.foreignKeysInTransactions === false) raw.exec('PRAGMA foreign_keys = ON');
       }
     },
     close: () => raw.close(),
