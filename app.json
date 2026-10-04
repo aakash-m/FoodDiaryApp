@@ -33,7 +33,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#F0F8E9",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
@@ -43,7 +43,16 @@
       [
         "expo-notifications",
         {
+          "icon": "./assets/images/notification-icon.png",
           "color": "#518059"
+        }
+      ],
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow Food Diary to take photos of your meals.",
+          "microphonePermission": false
         }
       ]
     ],
