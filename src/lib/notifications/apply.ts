@@ -14,8 +14,14 @@ function toTrigger(r: PlannedReminder): Notifications.NotificationTriggerInput {
 /**
  * Makes the scheduled reminders match the plan: cancels ones that are gone or changed, schedules
  * new or changed ones, and leaves identical ones alone (compared by a signature stored in `data`).
+ *
+ * `rearm` re-schedules everything. Use it on the first sync after app launch: a force-stop wipes the
+ * app's Android alarms while expo-notifications still lists the requests as scheduled.
  */
-export async function applyReminderPlan(plan: PlannedReminder[]): Promise<{ scheduled: number; cancelled: number }> {
+export async function applyReminderPlan(
+  plan: PlannedReminder[],
+  opts: { rearm?: boolean } = {},
+): Promise<{ scheduled: number; cancelled: number }> {
   await ensureReminderChannel();
   const wanted = new Map(plan.map((r) => [r.id, r]));
   const existing = (await Notifications.getAllScheduledNotificationsAsync()).filter((n) => isOurs(n.identifier));
@@ -24,7 +30,7 @@ export async function applyReminderPlan(plan: PlannedReminder[]): Promise<{ sche
   const keep = new Set<string>();
   for (const n of existing) {
     const target = wanted.get(n.identifier);
-    if (target && n.content.data?.sig === reminderSignature(target)) {
+    if (!opts.rearm && target && n.content.data?.sig === reminderSignature(target)) {
       keep.add(n.identifier);
       continue;
     }
@@ -54,6 +60,14 @@ export async function sendTestReminder(): Promise<void> {
     content: { title: 'Test reminder', body: 'Reminders are working. You can close this.', data: { url: '/settings/reminders' } },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: TEST_REMINDER_DELAY_S, channelId: REMINDER_CHANNEL_ID },
   });
+}
+
+/** Removes delivered water reminders from the shade (they'd otherwise pile up over the day). */
+export async function dismissDeliveredWaterReminders(): Promise<void> {
+  const presented = await Notifications.getPresentedNotificationsAsync();
+  for (const n of presented) {
+    if (n.request.identifier.startsWith('water-')) await Notifications.dismissNotificationAsync(n.request.identifier);
+  }
 }
 
 /** Show reminders as banners even while the app is open. */

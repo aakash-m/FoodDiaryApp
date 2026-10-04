@@ -56,6 +56,12 @@ describe('applyReminderPlan', () => {
     expect(mockScheduled.get('eod-2026-10-04')?.content.data.url).toBe('/mealtimes');
   });
 
+  it('re-arms unchanged reminders when asked (after a force-stop wiped the alarms)', async () => {
+    await applyReminderPlan([water(8), eod('Lunch')]);
+    jest.clearAllMocks();
+    expect(await applyReminderPlan([water(8), eod('Lunch')], { rearm: true })).toEqual({ scheduled: 2, cancelled: 2 });
+  });
+
   it('does not touch notifications that are not reminders', async () => {
     mockScheduled.set('other', { identifier: 'other', content: { data: {} } });
     await applyReminderPlan([]);

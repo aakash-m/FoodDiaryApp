@@ -6,12 +6,14 @@ import { AppState } from 'react-native';
 import { getDay } from '@/lib/db/diaryRepo';
 import { useDb } from '@/lib/db/DbProvider';
 import { todayKey } from '@/lib/dates';
-import { applyReminderPlan } from '@/lib/notifications/apply';
+import { applyReminderPlan, dismissDeliveredWaterReminders } from '@/lib/notifications/apply';
 import { planReminders } from '@/lib/notifications/plan';
 import { useDiaryVersion } from '@/state/diaryEvents';
 import { useSettings } from '@/state/settings';
 
 const SYNC_DELAY_MS = 600;
+/** The first sync of each app process re-arms all alarms (see applyReminderPlan). */
+let rearmed = false;
 
 /**
  * Keeps scheduled reminders in line with settings and today's diary: re-plans on start, when the app
@@ -37,7 +39,11 @@ export function useReminderSync(): void {
           today,
           todayDay,
         });
-        if (!cancelled) await applyReminderPlan(plan);
+        if (cancelled) return;
+        await applyReminderPlan(plan, { rearm: !rearmed });
+        rearmed = true;
+        // The user is in the app now, so earlier water nudges are no longer useful.
+        await dismissDeliveredWaterReminders();
       } catch (e) {
         console.warn('Reminder sync failed', e);
       }
@@ -65,10 +71,13 @@ export function useReminderTaps(): void {
       const key = `${response.notification.request.identifier}:${response.notification.date}`;
       if (handled.current === key) return;
       handled.current = key;
+      // The last response survives restarts; clear it so the same tap isn't replayed on the next launch.
+      Notifications.clearLastNotificationResponse();
       const url = response.notification.request.content.data?.url;
-      if (typeof url === 'string' && url.startsWith('/')) router.push(url as Href);
+      // navigate (not push): switches to an existing tab like /mealtimes instead of stacking a copy.
+      if (typeof url === 'string' && url.startsWith('/')) router.navigate(url as Href);
     };
-    Notifications.getLastNotificationResponseAsync().then(open, () => {});
+    open(Notifications.getLastNotificationResponse());
     const sub = Notifications.addNotificationResponseReceivedListener(open);
     return () => sub.remove();
   }, []);
