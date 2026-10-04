@@ -78,8 +78,6 @@ const DAYS = new Map<DateKey, MockDay>(
   }),
 );
 
-export const userName = 'Anna';
-
 export function getDay(date: DateKey): MockDay {
   return DAYS.get(date) ?? emptyDay(date);
 }
@@ -104,12 +102,3 @@ export function summarize(day: MockDay): DaySummary {
 export function isFuture(date: DateKey): boolean {
   return diffDays(TODAY, date) > 0;
 }
-
-export type BackupInfo = { lastBackup: DateKey; folder: string; files: number; sizeMb: number };
-
-export const backupInfo: BackupInfo = {
-  lastBackup: addDays(TODAY, -5),
-  folder: 'Downloads/FoodDiary',
-  files: 6,
-  sizeMb: 148,
-};

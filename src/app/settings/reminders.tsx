@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text } from 'react-native';
 import { ListRow } from '@/components/ui/ListRow';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Select, type SelectOption } from '@/components/ui/Select';
-import { updateSettings, useSettings } from '@/state/session';
+import { useSettings, useUpdateSettings } from '@/state/settings';
 import { colors, fonts, spacing } from '@/theme/tokens';
 
 // "Settings Sub-menu" (plain list) mockup.
@@ -21,6 +21,7 @@ const EOD_TIMES: SelectOption[] = ['20:00', '20:30', '21:00', '21:30', '22:00', 
 
 export default function RemindersScreen() {
   const s = useSettings();
+  const updateSettings = useUpdateSettings();
   return (
     <ScrollView style={styles.screen}>
       <ScreenHeader title="Reminder times" />
@@ -31,8 +32,8 @@ export default function RemindersScreen() {
         value="Every 2 hours"
         toggle={{ value: s.waterReminder, onChange: (v) => updateSettings({ waterReminder: v }) }}
       />
-      <Select variant="row" icon="time" label="Starts at" value={s.waterStart} options={hours(5, 12)} onChange={(v) => updateSettings({ waterStart: v })} />
-      <Select variant="row" icon="time" label="Ends at" value={s.waterEnd} options={hours(18, 23)} onChange={(v) => updateSettings({ waterEnd: v })} />
+      <Select variant="row" icon="time" label="Starts at" value={s.waterStart} options={hours(5, 12)} onChange={(v) => updateSettings({ waterStart: v })} disabled={!s.waterReminder} />
+      <Select variant="row" icon="time" label="Ends at" value={s.waterEnd} options={hours(18, 23)} onChange={(v) => updateSettings({ waterEnd: v })} disabled={!s.waterReminder} />
 
       <Text style={styles.group}>End-of-day check</Text>
       <ListRow
@@ -41,7 +42,7 @@ export default function RemindersScreen() {
         value="Meals not logged or skipped, empty water or exercise"
         toggle={{ value: s.endOfDayReminder, onChange: (v) => updateSettings({ endOfDayReminder: v }) }}
       />
-      <Select variant="row" icon="time" label="Check at" value={s.endOfDayTime} options={EOD_TIMES} onChange={(v) => updateSettings({ endOfDayTime: v })} />
+      <Select variant="row" icon="time" label="Check at" value={s.endOfDayTime} options={EOD_TIMES} onChange={(v) => updateSettings({ endOfDayTime: v })} disabled={!s.endOfDayReminder} />
 
       <Text style={styles.group}>Backup</Text>
       <ListRow

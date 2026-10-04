@@ -2,7 +2,7 @@ import { Redirect } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 
 import { TabBar } from '@/components/TabBar';
-import { useSettings } from '@/state/session';
+import { useSettings } from '@/state/settings';
 
 export default function TabsLayout() {
   const { onboarded } = useSettings();

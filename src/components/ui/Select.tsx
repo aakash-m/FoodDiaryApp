@@ -16,17 +16,18 @@ type Props = {
   /** 'field' (filled dropdown) or 'row' (settings list row with icon). */
   variant?: 'field' | 'row';
   icon?: IconName;
+  disabled?: boolean;
 };
 
 /** Filled dropdown field (Meal Editor "Selection") that opens a bottom sheet of options. */
-export function Select({ label, value, options, onChange, variant = 'field', icon = 'time' }: Props) {
+export function Select({ label, value, options, onChange, variant = 'field', icon = 'time', disabled }: Props) {
   const [open, setOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const current = options.find((o) => o.value === value);
   return (
     <>
       {variant === 'row' ? (
-        <ListRow icon={icon} label={label} value={current?.label} accessory="expand" onPress={() => setOpen(true)} />
+        <ListRow icon={icon} label={label} value={current?.label} accessory="expand" onPress={() => setOpen(true)} disabled={disabled} />
       ) : (
       <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => setOpen(true)} style={styles.field}>
         <Text style={styles.label}>{label}</Text>

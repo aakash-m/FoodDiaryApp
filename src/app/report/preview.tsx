@@ -13,14 +13,16 @@ import { Dialog } from '@/components/ui/Sheet';
 import { addDays, diffDays, formatDate, startOfIsoWeek, todayKey, weekLabel, weekdayName, weekdayShort } from '@/lib/dates';
 import { MEAL_TYPES } from '@/lib/meals';
 import { getDay, summarize } from '@/mocks/diary';
-import { useSettings } from '@/state/session';
+import { describeFolderUri } from '@/lib/folderLabel';
+import { useSettings } from '@/state/settings';
 import { colors, fonts, spacing } from '@/theme/tokens';
 
 // "Weekly Report" mockup mapped to the report preview. .docx generation is mocked until Phase 4.
 
 export default function ReportPreviewScreen() {
   const insets = useSafeAreaInsets();
-  const { name, backupFolder } = useSettings();
+  const { name, backupDirUri } = useSettings();
+  const folder = describeFolderUri(backupDirUri) ?? 'Documents/FoodDiary';
   const params = useLocalSearchParams<{ start: string; end: string }>();
   const start = params.start ?? startOfIsoWeek(todayKey());
   const end = params.end ?? todayKey();
@@ -34,7 +36,7 @@ export default function ReportPreviewScreen() {
   const waterDays = days.filter(({ day }) => day.water.trim()).length;
   const exerciseDays = days.filter(({ day }) => day.exercise.trim()).length;
   const photos = days.reduce((n, { day }) => n + day.meals.reduce((m, meal) => m + meal.photos.length, 0), 0);
-  const fileName = `FoodDiary_${name}_${start}_${end}.docx`;
+  const fileName = `FoodDiary_${(name || 'Diary').replace(/[^\p{L}\p{N}]+/gu, '-')}_${start}_${end}.docx`;
   const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
 
   return (
@@ -44,13 +46,13 @@ export default function ReportPreviewScreen() {
         trailing={
           <PillButton
             label="Save"
-            onPress={() => setNotice({ title: 'Report saved', message: `${fileName} was saved to ${backupFolder ?? 'Downloads/FoodDiary'}.` })}
+            onPress={() => setNotice({ title: 'Report saved', message: `${fileName} will be saved to ${folder}.` })}
           />
         }
       />
       <ScrollView contentContainerStyle={styles.content}>
         <Card>
-          <Text style={styles.cardTitle}>Food Diary — {name}</Text>
+          <Text style={styles.cardTitle}>Food Diary{name ? ` — ${name}` : ''}</Text>
           <Text style={styles.cardSubtitle}>
             {weekLabel(start, end)} · {formatDate(start)} – {formatDate(end)}
           </Text>
