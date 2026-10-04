@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   day: { fontFamily: fonts.regular, fontSize: 16, color: colors.textPrimary },
   dayMuted: { color: colors.textDisabled },
   daySelected: { color: colors.white, fontFamily: fonts.medium },
-  marker: { width: 5, height: 5, borderRadius: 2.5, marginTop: 3 },
+  marker: { width: 5, height: 5, borderRadius: 2.5, marginTop: 3, backgroundColor: 'transparent', overflow: 'hidden' },
   markerComplete: { backgroundColor: colors.sageDotActive },
   markerPartial: { backgroundColor: colors.amber },
 });

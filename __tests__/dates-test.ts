@@ -5,6 +5,7 @@ import {
   formatShortDate,
   isDateKey,
   isoWeek,
+  relativeDay,
   monthGrid,
   startOfIsoWeek,
   weekdayName,
@@ -85,4 +86,13 @@ describe('monthGrid', () => {
   it('handles February in a leap year', () => {
     expect(monthGrid(2028, 1).filter((c) => c.inMonth)).toHaveLength(29);
   });
+});
+
+describe('relativeDay', () => {
+  it.each([
+    ['2026-10-04', 'Today'],
+    ['2026-10-03', 'Yesterday'],
+    ['2026-09-30', '4 days ago'],
+    ['2026-10-05', 'Today'],
+  ])('%s → %s', (date, label) => expect(relativeDay(date, '2026-10-04')).toBe(label));
 });

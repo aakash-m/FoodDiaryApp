@@ -58,6 +58,14 @@ export function weekdayShort(key: DateKey): string {
   return weekdayName(key).slice(0, 3);
 }
 
+/** "Today", "Yesterday", "3 days ago" (future dates read "Today"). */
+export function relativeDay(date: DateKey, today: DateKey): string {
+  const days = diffDays(date, today);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days} days ago`;
+}
+
 export function monthLabel(year: number, month: number): string {
   return `${MONTHS[month]} ${year}`;
 }

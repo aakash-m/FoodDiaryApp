@@ -1,27 +1,29 @@
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
+import { MAX_PHOTOS_PER_MEAL } from '@/lib/db/diaryRepo';
 import { colors, fonts } from '@/theme/tokens';
 
-export const MAX_PHOTOS = 5;
-
 type Props = {
-  photos: ImageSourcePropType[];
+  /** Photo file URIs in display order. */
+  photos: string[];
   onAdd: () => void;
   onRemove: (index: number) => void;
   disabled?: boolean;
+  /** Shows a spinner in the add tile while picked photos are being processed. */
+  busy?: boolean;
 };
 
 /** Meal Editor mockup: one large photo on the left, four small ones in a 2×2 grid. */
-export function PhotoGrid({ photos, onAdd, onRemove, disabled }: Props) {
+export function PhotoGrid({ photos, onAdd, onRemove, disabled, busy }: Props) {
   const slot = (i: number, large = false) => {
     const photo = photos[i];
     const style = large ? styles.large : styles.small;
     if (photo) {
       return (
-        <View key={i} style={style}>
-          <Image source={photo} style={styles.fill} contentFit="cover" />
+        <View key={`photo-${i}`} style={style}>
+          <Image source={{ uri: photo }} style={styles.fill} contentFit="cover" accessibilityLabel={`Photo ${i + 1}`} />
           {!disabled && (
             <Pressable accessibilityLabel={`Remove photo ${i + 1}`} hitSlop={6} onPress={() => onRemove(i)} style={styles.remove}>
               <Icon name="close" size={14} color={colors.white} />
@@ -31,9 +33,16 @@ export function PhotoGrid({ photos, onAdd, onRemove, disabled }: Props) {
       );
     }
     if (i === photos.length && !disabled) {
+      if (busy) {
+        return (
+          <View key={`busy-${i}`} style={[style, styles.add]} accessibilityLabel="Adding photos">
+            <ActivityIndicator color={colors.sage} />
+          </View>
+        );
+      }
       return (
         <Pressable
-          key={i}
+          key={`add-${i}`}
           accessibilityRole="button"
           accessibilityLabel="Add photo"
           onPress={onAdd}
@@ -41,11 +50,11 @@ export function PhotoGrid({ photos, onAdd, onRemove, disabled }: Props) {
         >
           <Icon name="camera" size={large ? 32 : 22} color={colors.sage} />
           {large && <Text style={styles.addText}>Add photos</Text>}
-          {large && <Text style={styles.addHint}>Camera or gallery · up to {MAX_PHOTOS}</Text>}
+          {large && <Text style={styles.addHint}>Camera or gallery · up to {MAX_PHOTOS_PER_MEAL}</Text>}
         </Pressable>
       );
     }
-    return <View key={i} style={[style, styles.empty]} />;
+    return <View key={`empty-${i}`} style={[style, styles.empty]} />;
   };
 
   return (

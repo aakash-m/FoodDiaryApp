@@ -6,18 +6,20 @@ import { NavCard, Card } from '@/components/ui/Card';
 import { LargeTitle } from '@/components/ui/ScreenHeader';
 import { Stat } from '@/components/ui/Misc';
 import { LinearBar, ProgressRing } from '@/components/ui/Progress';
+import { useDiaryQuery } from '@/hooks/useDiaryQuery';
+import { summarizeDay, type DaySummary } from '@/lib/completeness';
+import { getDaysInRange } from '@/lib/db/diaryRepo';
 import { addDays, startOfIsoWeek, todayKey, weekLabel } from '@/lib/dates';
-import { getDay, summarize } from '@/mocks/diary';
 import { colors, fonts, spacing } from '@/theme/tokens';
 
 // "Daily goals" mockup mapped to diary completeness: today's n/9 ring plus this week's progress.
 
 export default function ProgressScreen() {
   const today = todayKey();
-  const s = summarize(getDay(today));
   const weekStart = startOfIsoWeek(today);
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).filter((d) => d <= today);
-  const week = weekDays.map((d) => summarize(getDay(d)));
+  const query = useDiaryQuery((db) => getDaysInRange(db, weekStart, today), [weekStart, today]);
+  const week: DaySummary[] = (query.data ?? []).map(summarizeDay);
+  const s = week[week.length - 1] ?? summarizeDay({ meals: [], water: '', exercise: '' });
   const weekDone = week.reduce((n, d) => n + d.done, 0);
   const weekTotal = week.reduce((n, d) => n + d.total, 0);
   const completeDays = week.filter((d) => d.missing === 0).length;
@@ -39,7 +41,7 @@ export default function ProgressScreen() {
       <Card style={styles.card}>
         <Text style={styles.cardTitle}>This week</Text>
         <Text style={styles.cardSubtitle}>
-          {weekLabel(weekStart, addDays(weekStart, 6))} · {completeDays} of {weekDays.length} days complete
+          {weekLabel(weekStart, addDays(weekStart, 6))} · {completeDays} of {week.length} days complete
         </Text>
         <View style={{ marginTop: 14 }}>
           <LinearBar label="Items logged" progress={weekTotal ? weekDone / weekTotal : 0} trailing={`${weekDone}/${weekTotal}`} />

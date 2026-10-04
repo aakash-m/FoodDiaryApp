@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarChart } from '@/components/BarChart';
@@ -10,9 +10,11 @@ import { Stat } from '@/components/ui/Misc';
 import { LinearBar } from '@/components/ui/Progress';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Dialog } from '@/components/ui/Sheet';
-import { addDays, diffDays, formatDate, startOfIsoWeek, todayKey, weekLabel, weekdayName, weekdayShort } from '@/lib/dates';
+import { formatDate, isDateKey, startOfIsoWeek, todayKey, weekLabel, weekdayName, weekdayShort } from '@/lib/dates';
 import { MEAL_TYPES } from '@/lib/meals';
-import { getDay, summarize } from '@/mocks/diary';
+import { useDiaryQuery } from '@/hooks/useDiaryQuery';
+import { summarizeDay } from '@/lib/completeness';
+import { getDaysInRange } from '@/lib/db/diaryRepo';
 import { describeFolderUri } from '@/lib/folderLabel';
 import { useSettings } from '@/state/settings';
 import { colors, fonts, spacing } from '@/theme/tokens';
@@ -24,10 +26,10 @@ export default function ReportPreviewScreen() {
   const { name, backupDirUri } = useSettings();
   const folder = describeFolderUri(backupDirUri) ?? 'Documents/FoodDiary';
   const params = useLocalSearchParams<{ start: string; end: string }>();
-  const start = params.start ?? startOfIsoWeek(todayKey());
-  const end = params.end ?? todayKey();
-  const dates = Array.from({ length: diffDays(start, end) + 1 }, (_, i) => addDays(start, i));
-  const days = dates.map((d) => ({ date: d, day: getDay(d), s: summarize(getDay(d)) }));
+  const start = params.start && isDateKey(params.start) ? params.start : startOfIsoWeek(todayKey());
+  const end = params.end && isDateKey(params.end) && params.end >= start ? params.end : todayKey();
+  const query = useDiaryQuery((db) => getDaysInRange(db, start, end), [start, end]);
+  const days = (query.data ?? []).map((day) => ({ date: day.date, day, s: summarizeDay(day) }));
 
   const totals = days.reduce(
     (t, { s }) => ({ logged: t.logged + s.logged, skipped: t.skipped + s.skipped, missing: t.missing + s.missing }),
@@ -50,6 +52,9 @@ export default function ReportPreviewScreen() {
           />
         }
       />
+      {!query.data ? (
+        <ActivityIndicator color={colors.sage} style={styles.loading} />
+      ) : (
       <ScrollView contentContainerStyle={styles.content}>
         <Card>
           <Text style={styles.cardTitle}>Food Diary{name ? ` — ${name}` : ''}</Text>
@@ -81,8 +86,8 @@ export default function ReportPreviewScreen() {
         <Card style={styles.card}>
           <Text style={styles.cardTitle}>Water & exercise</Text>
           <View style={styles.bars}>
-            <LinearBar label="Water intake" progress={waterDays / days.length} trailing={`${waterDays}/${days.length} days`} />
-            <LinearBar label="Exercise" progress={exerciseDays / days.length} trailing={`${exerciseDays}/${days.length} days`} />
+            <LinearBar label="Water intake" progress={days.length ? waterDays / days.length : 0} trailing={`${waterDays}/${days.length} days`} />
+            <LinearBar label="Exercise" progress={days.length ? exerciseDays / days.length : 0} trailing={`${exerciseDays}/${days.length} days`} />
           </View>
         </Card>
 
@@ -105,6 +110,7 @@ export default function ReportPreviewScreen() {
           </View>
         </Card>
       </ScrollView>
+      )}
       <View style={[styles.actions, { paddingBottom: insets.bottom + 14 }]}>
         <Button
           label="Share"
@@ -134,6 +140,7 @@ export default function ReportPreviewScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.screen, paddingBottom: 24 },
+  loading: { flex: 1 },
   card: { marginTop: 14 },
   cardTitle: { fontFamily: fonts.medium, fontSize: 18, color: colors.textPrimary },
   cardSubtitle: { marginTop: 2, fontFamily: fonts.regular, fontSize: 14, color: colors.textSecondary },

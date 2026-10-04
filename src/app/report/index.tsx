@@ -20,7 +20,9 @@ import {
   weekdayName,
   type DateKey,
 } from '@/lib/dates';
-import { getDay, isFuture, summarize } from '@/mocks/diary';
+import { useDiaryQuery } from '@/hooks/useDiaryQuery';
+import { summarizeDay } from '@/lib/completeness';
+import { getDaySummaries } from '@/lib/db/diaryRepo';
 import { colors, fonts, radii, spacing } from '@/theme/tokens';
 
 // "Meal Editor – Part 2" mockup mapped to the report range picker: start date + up to 7 day cards.
@@ -35,6 +37,8 @@ export default function ReportRangeScreen() {
   const [picking, setPicking] = useState(false);
 
   const days = Array.from({ length: MAX_DAYS }, (_, i) => addDays(start, i));
+  const summaries = useDiaryQuery((db) => getDaySummaries(db, start, addDays(start, MAX_DAYS - 1)), [start]);
+  const isFuture = (d: DateKey) => d > today;
   const count = diffDays(start, end) + 1;
 
   const changeStart = (d: DateKey) => {
@@ -73,7 +77,7 @@ export default function ReportRangeScreen() {
           {days.map((d) => {
             const future = isFuture(d);
             const included = d <= end;
-            const s = summarize(getDay(d));
+            const s = summaries.data?.get(d) ?? summarizeDay({ meals: [], water: '', exercise: '' });
             return (
               <Pressable
                 key={d}
@@ -133,7 +137,7 @@ function StartPicker({ selected, onSelect }: { selected: DateKey; onSelect: (d: 
           <Icon name="chevron_right" size={24} />
         </Pressable>
       </View>
-      <MonthGrid year={view.year} month={view.month} selected={selected} onSelect={onSelect} isDisabled={isFuture} tintedHeader={false} />
+      <MonthGrid year={view.year} month={view.month} selected={selected} onSelect={onSelect} isDisabled={(d) => d > todayKey()} tintedHeader={false} />
     </View>
   );
 }

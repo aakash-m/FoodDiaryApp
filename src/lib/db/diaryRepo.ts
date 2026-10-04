@@ -163,19 +163,9 @@ async function touchDay(tx: Db, date: DateKey, now: string) {
   );
 }
 
-/**
- * Creates, updates or clears a meal. Skipping clears description and photos (PLAN.md §2.3).
- * A meal with no description, no photos and not skipped is removed.
- */
-export async function saveMeal(
-  db: Db,
-  date: DateKey,
-  type: string,
-  input: SaveMealInput,
-  opts: { today?: DateKey } = {},
-): Promise<SaveMealResult> {
-  assertLoggableDate(date, opts.today ?? todayKey());
-  if (!isMealTypeKey(type)) throw new ValidationError(`Unknown meal type "${type}"`);
+type NormalizedMeal = { status: MealStatus; description: string; skipReason: string; fileNames: string[] };
+
+function normalizeMeal(input: SaveMealInput): NormalizedMeal {
   const description = input.skipped ? '' : input.description.trim();
   const skipReason = input.skipped ? (input.skipReason ?? '').trim() : '';
   const fileNames = input.skipped ? [] : input.photoFileNames;
@@ -183,62 +173,125 @@ export async function saveMeal(
   assertMaxLength(skipReason, MAX_SKIP_REASON_LENGTH, 'Skip reason');
   if (fileNames.length > MAX_PHOTOS_PER_MEAL) throw new ValidationError(`A meal can have at most ${MAX_PHOTOS_PER_MEAL} photos`);
   if (new Set(fileNames).size !== fileNames.length) throw new ValidationError('Duplicate photo in meal');
-
   const status = deriveMealStatus({ skipped: input.skipped, description, photoCount: fileNames.length });
+  return { status, description, skipReason, fileNames };
+}
+
+const EMPTY: NormalizedMeal = { status: 'empty', description: '', skipReason: '', fileNames: [] };
+
+/** Writes one meal slot inside a transaction; returns the record and photo files it no longer references. */
+async function writeMeal(tx: Db, date: DateKey, type: MealTypeKey, meal: NormalizedMeal, now: string): Promise<SaveMealResult> {
+  const existing = await tx.first<{ id: string }>('SELECT id FROM meal_entry WHERE date = ? AND meal_type = ?', date, type);
+  const oldPhotos = existing
+    ? await tx.all<PhotoRow>('SELECT id, meal_entry_id, file_name, sort_order FROM photo WHERE meal_entry_id = ?', existing.id)
+    : [];
+  const removedFileNames = oldPhotos.map((p) => p.file_name).filter((f) => !meal.fileNames.includes(f));
+  await touchDay(tx, date, now);
+
+  if (meal.status === 'empty') {
+    if (existing) await tx.run('DELETE FROM meal_entry WHERE id = ?', existing.id);
+    return { meal: emptyMeal(type), removedFileNames };
+  }
+
+  const id = existing?.id ?? newId();
+  await tx.run(
+    `INSERT INTO meal_entry (id, date, meal_type, status, description, skip_reason, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (date, meal_type) DO UPDATE SET
+       status = excluded.status, description = excluded.description,
+       skip_reason = excluded.skip_reason, updated_at = excluded.updated_at`,
+    id,
+    date,
+    type,
+    meal.status,
+    meal.description,
+    meal.skipReason,
+    now,
+  );
+
+  // Rewrite photo rows in the new order, keeping the ids of photos that stay.
+  const kept = new Map(oldPhotos.map((p) => [p.file_name, p]));
+  await tx.run('DELETE FROM photo WHERE meal_entry_id = ?', id);
+  const photos: PhotoRecord[] = [];
+  for (const [sortOrder, fileName] of meal.fileNames.entries()) {
+    const photoId = kept.get(fileName)?.id ?? newId();
+    await tx.run(
+      'INSERT INTO photo (id, meal_entry_id, file_name, sort_order, created_at) VALUES (?, ?, ?, ?, ?)',
+      photoId,
+      id,
+      fileName,
+      sortOrder,
+      now,
+    );
+    photos.push({ id: photoId, fileName, sortOrder });
+  }
+
+  return {
+    meal: { type, status: meal.status, description: meal.description, skipReason: meal.skipReason, photos, updatedAt: now },
+    removedFileNames,
+  };
+}
+
+/**
+ * Creates, updates or clears a meal. Skipping clears description and photos (PLAN.md §2.3).
+ * A meal with no description, no photos and not skipped is removed.
+ * With `fromType` (the user changed the meal type in the editor) the entry moves: the old slot is
+ * cleared and the target slot replaced, in one transaction.
+ */
+export async function saveMeal(
+  db: Db,
+  date: DateKey,
+  type: string,
+  input: SaveMealInput,
+  opts: { today?: DateKey; fromType?: string } = {},
+): Promise<SaveMealResult> {
+  assertLoggableDate(date, opts.today ?? todayKey());
+  if (!isMealTypeKey(type)) throw new ValidationError(`Unknown meal type "${type}"`);
+  const fromType = opts.fromType ?? type;
+  if (!isMealTypeKey(fromType)) throw new ValidationError(`Unknown meal type "${fromType}"`);
+  const meal = normalizeMeal(input);
   const now = new Date().toISOString();
 
   return db.transaction(async (tx) => {
-    const existing = await tx.first<{ id: string }>('SELECT id FROM meal_entry WHERE date = ? AND meal_type = ?', date, type);
-    const oldPhotos = existing
-      ? await tx.all<PhotoRow>('SELECT id, meal_entry_id, file_name, sort_order FROM photo WHERE meal_entry_id = ?', existing.id)
-      : [];
-    const removedFileNames = oldPhotos.map((p) => p.file_name).filter((f) => !fileNames.includes(f));
-
-    if (status === 'empty') {
-      if (existing) await tx.run('DELETE FROM meal_entry WHERE id = ?', existing.id);
-      await touchDay(tx, date, now);
-      return { meal: emptyMeal(type), removedFileNames };
-    }
-
-    await touchDay(tx, date, now);
-    const id = existing?.id ?? newId();
-    await tx.run(
-      `INSERT INTO meal_entry (id, date, meal_type, status, description, skip_reason, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (date, meal_type) DO UPDATE SET
-         status = excluded.status, description = excluded.description,
-         skip_reason = excluded.skip_reason, updated_at = excluded.updated_at`,
-      id,
-      date,
-      type,
-      status,
-      description,
-      skipReason,
-      now,
-    );
-
-    // Rewrite photo rows in the new order, keeping ids (and created_at) of photos that stay.
-    const kept = new Map(oldPhotos.map((p) => [p.file_name, p]));
-    await tx.run('DELETE FROM photo WHERE meal_entry_id = ?', id);
-    const photos: PhotoRecord[] = [];
-    for (const [sortOrder, fileName] of fileNames.entries()) {
-      const photoId = kept.get(fileName)?.id ?? newId();
-      await tx.run(
-        'INSERT INTO photo (id, meal_entry_id, file_name, sort_order, created_at) VALUES (?, ?, ?, ?, ?)',
-        photoId,
-        id,
-        fileName,
-        sortOrder,
-        now,
-      );
-      photos.push({ id: photoId, fileName, sortOrder });
-    }
-
-    return {
-      meal: { type, status, description, skipReason, photos, updatedAt: now },
-      removedFileNames,
-    };
+    if (fromType === type) return writeMeal(tx, date, type, meal, now);
+    const cleared = await writeMeal(tx, date, fromType, EMPTY, now);
+    const saved = await writeMeal(tx, date, type, meal, now);
+    // Photos carried over from the old slot are still in use.
+    const removed = new Set([...cleared.removedFileNames, ...saved.removedFileNames]);
+    for (const f of meal.fileNames) removed.delete(f);
+    return { meal: saved.meal, removedFileNames: [...removed] };
   });
+}
+
+export type RecentMeal = MealRecord & { date: DateKey };
+
+/** Most recently updated logged or skipped meals, newest first (Home feed, recent activity). */
+export async function getRecentMeals(db: Db, limit: number, opts: { withPhotosOnly?: boolean } = {}): Promise<RecentMeal[]> {
+  const rows = await db.all<MealRow>(
+    `SELECT m.id, m.date, m.meal_type, m.status, m.description, m.skip_reason, m.updated_at
+       FROM meal_entry m
+      WHERE m.status != 'empty' ${opts.withPhotosOnly ? 'AND EXISTS (SELECT 1 FROM photo p WHERE p.meal_entry_id = m.id)' : ''}
+      ORDER BY m.updated_at DESC, m.date DESC
+      LIMIT ?`,
+    limit,
+  );
+  if (rows.length === 0) return [];
+  const placeholders = rows.map(() => '?').join(', ');
+  const photoRows = await db.all<PhotoRow>(
+    `SELECT id, meal_entry_id, file_name, sort_order FROM photo WHERE meal_entry_id IN (${placeholders}) ORDER BY sort_order`,
+    ...rows.map((r) => r.id),
+  );
+  return rows.map((r) => ({
+    date: r.date,
+    type: r.meal_type,
+    status: r.status,
+    description: r.description,
+    skipReason: r.skip_reason,
+    updatedAt: r.updated_at,
+    photos: photoRows
+      .filter((p) => p.meal_entry_id === r.id)
+      .map((p) => ({ id: p.id, fileName: p.file_name, sortOrder: p.sort_order })),
+  }));
 }
 
 export type DayTextField = 'water' | 'exercise';

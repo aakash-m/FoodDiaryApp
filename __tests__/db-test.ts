@@ -2,6 +2,7 @@ import {
   DEFAULT_SETTINGS,
   getAllPhotoFileNames,
   getDay,
+  getRecentMeals,
   getDaySummaries,
   getDaysInRange,
   getSchemaVersion,
@@ -150,6 +151,57 @@ describe('meals', () => {
     await expect(saveMeal(failing, TODAY, 'lunch', meal('Dal', ['a.jpg']), opts)).rejects.toThrow('disk full');
     expect(await db.all('SELECT * FROM meal_entry')).toHaveLength(0);
     expect(await db.all('SELECT * FROM day_log')).toHaveLength(0);
+  });
+});
+
+describe('changing the meal type', () => {
+  it('moves the entry and keeps its photos', async () => {
+    await saveMeal(db, TODAY, 'snacks', meal('Apple', ['a.jpg']), opts);
+    const { meal: moved, removedFileNames } = await saveMeal(db, TODAY, 'mid_morning', meal('Apple', ['a.jpg']), { ...opts, fromType: 'snacks' });
+    expect(moved).toMatchObject({ type: 'mid_morning', status: 'logged', description: 'Apple' });
+    expect(removedFileNames).toEqual([]);
+    const day = await getDay(db, TODAY);
+    expect(day.meals.find((m) => m.type === 'snacks')?.status).toBe('empty');
+    expect(day.meals.find((m) => m.type === 'mid_morning')?.photos.map((p) => p.fileName)).toEqual(['a.jpg']);
+    expect(await getAllPhotoFileNames(db)).toEqual(['a.jpg']);
+  });
+
+  it('replaces an occupied target slot and reports its photos as removed', async () => {
+    await saveMeal(db, TODAY, 'lunch', meal('Old lunch', ['old.jpg']), opts);
+    await saveMeal(db, TODAY, 'dinner', meal('Soup', ['soup.jpg', 'bread.jpg']), opts);
+    const { removedFileNames } = await saveMeal(db, TODAY, 'lunch', meal('Soup', ['soup.jpg']), { ...opts, fromType: 'dinner' });
+    expect(removedFileNames.sort()).toEqual(['bread.jpg', 'old.jpg']);
+    const day = await getDay(db, TODAY);
+    expect(day.meals.find((m) => m.type === 'lunch')).toMatchObject({ description: 'Soup' });
+    expect(day.meals.find((m) => m.type === 'dinner')?.status).toBe('empty');
+  });
+
+  it('rejects an unknown source type', async () => {
+    await expect(saveMeal(db, TODAY, 'lunch', meal('x'), { ...opts, fromType: 'brunch' })).rejects.toThrow(/Unknown meal type/);
+  });
+});
+
+describe('recent meals', () => {
+  it('lists logged and skipped meals newest first, optionally only with photos', async () => {
+    await saveMeal(db, '2026-10-02', 'lunch', meal('Dal', ['dal.jpg']), opts);
+    await new Promise((r) => setTimeout(r, 5));
+    await saveMeal(db, '2026-10-03', 'breakfast', meal('', [], true), opts);
+    await new Promise((r) => setTimeout(r, 5));
+    await saveMeal(db, TODAY, 'dinner', meal('Soup'), opts);
+
+    const recent = await getRecentMeals(db, 10);
+    expect(recent.map((m) => [m.date, m.type, m.status])).toEqual([
+      [TODAY, 'dinner', 'logged'],
+      ['2026-10-03', 'breakfast', 'skipped'],
+      ['2026-10-02', 'lunch', 'logged'],
+    ]);
+    const withPhotos = await getRecentMeals(db, 10, { withPhotosOnly: true });
+    expect(withPhotos.map((m) => m.photos[0]?.fileName)).toEqual(['dal.jpg']);
+    expect(await getRecentMeals(db, 1)).toHaveLength(1);
+  });
+
+  it('returns an empty list for a new diary', async () => {
+    expect(await getRecentMeals(db, 5)).toEqual([]);
   });
 });
 

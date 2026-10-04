@@ -14,27 +14,41 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
-import { avatar, mealFeed, recentActivities, type FeedMeal } from '@/mocks/homeFeed';
-import { todayKey } from '@/lib/dates';
-import { getDay } from '@/mocks/diary';
+import { InitialsAvatar } from '@/components/InitialsAvatar';
+import { useDiaryQuery } from '@/hooks/useDiaryQuery';
+import { summarizeDay } from '@/lib/completeness';
+import { getDay, getRecentMeals, type RecentMeal } from '@/lib/db/diaryRepo';
+import { relativeDay, todayKey } from '@/lib/dates';
+import { mealType } from '@/lib/meals';
+import { photoUri } from '@/lib/photos';
+import { useSettings } from '@/state/settings';
 import { colors, fonts, radii, spacing } from '@/theme/tokens';
 
 const MEAL_CARD_WIDTH = 163;
 const MEAL_CARD_GAP = 16;
+const FEED_SIZE = 8;
+
+const openMeal = (m: Pick<RecentMeal, 'date' | 'type'>) =>
+  router.push({ pathname: '/meal/[date]/[type]', params: { date: m.date, type: m.type } });
 
 export default function HomeFeedScreen() {
   const insets = useSafeAreaInsets();
+  const { name } = useSettings();
+  const today = todayKey();
   const [activeMeal, setActiveMeal] = useState(0);
+  const feed = useDiaryQuery((db) => getRecentMeals(db, FEED_SIZE, { withPhotosOnly: true }), []).data ?? [];
+  const recent = useDiaryQuery((db) => getRecentMeals(db, 5), []).data ?? [];
+  const todayDay = useDiaryQuery((db) => getDay(db, today), [today]).data;
+  const todaySummary = todayDay ? summarizeDay(todayDay) : null;
 
   const addFood = () => {
-    const today = todayKey();
-    const type = getDay(today).meals.find((m) => m.status === 'empty')?.type ?? 'breakfast';
-    router.push({ pathname: '/meal/[date]/[type]', params: { date: today, type } });
+    const type = todayDay?.meals.find((m) => m.status === 'empty')?.type ?? 'breakfast';
+    openMeal({ date: today, type });
   };
 
   const onMealScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / (MEAL_CARD_WIDTH + MEAL_CARD_GAP));
-    setActiveMeal(Math.min(Math.max(index, 0), mealFeed.length - 1));
+    setActiveMeal(Math.min(Math.max(index, 0), Math.max(feed.length - 1, 0)));
   };
 
   return (
@@ -49,38 +63,53 @@ export default function HomeFeedScreen() {
           <Pressable accessibilityRole="button" accessibilityLabel="Settings" hitSlop={8} onPress={() => router.navigate('/settings')}>
             <Icon name="settings" size={28} color={colors.textPrimary} />
           </Pressable>
-          <Image source={avatar} style={styles.headerAvatar} accessibilityLabel="Profile" />
+          <Pressable accessibilityRole="button" onPress={() => router.push('/settings/profile')}>
+            <InitialsAvatar name={name} size={45} />
+          </Pressable>
         </View>
       </View>
 
       <View style={styles.sectionHeader}>
         <View>
           <Text style={styles.sectionTitle}>Meal Feed</Text>
-          <Text style={styles.sectionSubtitle}>2 days ago</Text>
+          <Text style={styles.sectionSubtitle}>{feed[0] ? relativeDay(feed[0].date, today) : 'No photos yet'}</Text>
         </View>
         <View style={styles.pill}>
-          <Text style={styles.pillText}>Logged</Text>
+          <Text style={styles.pillText}>{todaySummary ? `${todaySummary.done}/${todaySummary.total} today` : 'Logged'}</Text>
         </View>
       </View>
 
-      <FlatList
-        data={mealFeed}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <MealCard meal={item} />}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={MEAL_CARD_WIDTH + MEAL_CARD_GAP}
-        decelerationRate="fast"
-        onScroll={onMealScroll}
-        scrollEventThrottle={16}
-        style={styles.carousel}
-        contentContainerStyle={styles.carouselContent}
-        ItemSeparatorComponent={() => <View style={{ width: MEAL_CARD_GAP }} />}
-      />
+      {feed.length === 0 ? (
+        <View style={[styles.carousel, styles.carouselContent]}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={addFood}
+            style={({ pressed }) => [styles.mealCard, styles.emptyCard, pressed && styles.pressed]}
+          >
+            <Icon name="camera" size={34} color={colors.sage} />
+            <Text style={styles.emptyText}>Photos of your meals appear here</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          data={feed}
+          keyExtractor={(item) => `${item.date}-${item.type}`}
+          renderItem={({ item }) => <MealCard meal={item} today={today} />}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={MEAL_CARD_WIDTH + MEAL_CARD_GAP}
+          decelerationRate="fast"
+          onScroll={onMealScroll}
+          scrollEventThrottle={16}
+          style={styles.carousel}
+          contentContainerStyle={styles.carouselContent}
+          ItemSeparatorComponent={() => <View style={{ width: MEAL_CARD_GAP }} />}
+        />
+      )}
 
       <View style={styles.dots}>
-        {mealFeed.map((meal, i) => (
-          <View key={meal.id} style={[styles.dot, i === activeMeal && styles.dotActive]} />
+        {(feed.length ? feed : [null]).map((meal, i) => (
+          <View key={meal ? `${meal.date}-${meal.type}` : 'empty'} style={[styles.dot, i === activeMeal && styles.dotActive]} />
         ))}
       </View>
 
@@ -99,38 +128,51 @@ export default function HomeFeedScreen() {
       </View>
 
       <Text style={[styles.sectionTitle, styles.recentTitle]}>Recent Activities</Text>
-      {recentActivities.map((activity) => (
-        <View key={activity.id} style={styles.activityCard}>
-          <Image source={activity.avatar} style={styles.activityAvatar} />
-          <View>
-            <Text style={styles.activityText}>
-              {activity.action} <Text style={styles.activitySubject}>{activity.subject}</Text>
-            </Text>
-            <Text style={styles.activitySubtitle}>{activity.subtitle}</Text>
-          </View>
-        </View>
-      ))}
+      {recent.length === 0 ? (
+        <Text style={styles.emptyActivities}>Nothing logged yet. Your latest entries will show up here.</Text>
+      ) : (
+        recent.map((m) => (
+          <Pressable
+            key={`${m.date}-${m.type}`}
+            accessibilityRole="button"
+            onPress={() => openMeal(m)}
+            style={({ pressed }) => [styles.activityCard, pressed && styles.pressed]}
+          >
+            <InitialsAvatar name={name} size={50} />
+            <View style={styles.activityTextWrap}>
+              <Text style={styles.activityText} numberOfLines={1}>
+                {m.status === 'skipped' ? 'Skipped' : 'Logged'} <Text style={styles.activitySubject}>{mealType(m.type).label}</Text>
+              </Text>
+              <Text style={styles.activitySubtitle} numberOfLines={1}>
+                {relativeDay(m.date, today)}
+                {m.description ? ` · ${m.description}` : ''}
+              </Text>
+            </View>
+          </Pressable>
+        ))
+      )}
     </ScrollView>
   );
 }
 
-function MealCard({ meal }: { meal: FeedMeal }) {
+function MealCard({ meal, today }: { meal: RecentMeal; today: string }) {
   return (
-    <View style={styles.mealCard}>
-      <Image source={meal.image} style={styles.mealImage} contentFit="cover" />
+    <Pressable accessibilityRole="button" onPress={() => openMeal(meal)} style={({ pressed }) => [styles.mealCard, pressed && styles.pressed]}>
+      <Image source={{ uri: photoUri(meal.photos[0].fileName) }} style={styles.mealImage} contentFit="cover" />
       <View style={styles.mealInfo}>
         <Text style={styles.mealTitle} numberOfLines={1}>
-          {meal.title}
+          {mealType(meal.type).label}
         </Text>
-        <Text style={styles.mealSubtitle}>{meal.subtitle}</Text>
+        <Text style={styles.mealSubtitle}>{relativeDay(meal.date, today)}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: 24 },
+  pressed: { opacity: 0.85 },
 
   header: {
     flexDirection: 'row',
@@ -141,7 +183,6 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: fonts.regular, fontSize: 36, color: colors.textPrimary },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 23 },
-  headerAvatar: { width: 45, height: 45, borderRadius: 23 },
 
   sectionHeader: {
     flexDirection: 'row',
@@ -176,6 +217,8 @@ const styles = StyleSheet.create({
   mealInfo: { paddingHorizontal: 16, paddingTop: 9 },
   mealTitle: { fontFamily: fonts.semiBold, fontSize: 18, color: colors.textPrimary },
   mealSubtitle: { marginTop: 2, fontFamily: fonts.regular, fontSize: 16, color: colors.textSecondary },
+  emptyCard: { alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16 },
+  emptyText: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 20, color: colors.textSecondary, textAlign: 'center' },
 
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 21 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.sageDotInactive },
@@ -207,6 +250,14 @@ const styles = StyleSheet.create({
   addButtonText: { fontFamily: fonts.regular, fontSize: 19, color: colors.textOnSage },
 
   recentTitle: { marginTop: 19, paddingHorizontal: spacing.screen },
+  emptyActivities: {
+    marginTop: 8,
+    paddingHorizontal: spacing.screen,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    lineHeight: 22,
+    color: colors.textSecondary,
+  },
   activityCard: {
     marginTop: 10,
     marginHorizontal: spacing.screen,
@@ -217,7 +268,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  activityAvatar: { width: 50, height: 50, borderRadius: 25 },
+  activityTextWrap: { flex: 1 },
   activityText: { fontFamily: fonts.regular, fontSize: 18, color: colors.textPrimary },
   activitySubject: { fontFamily: fonts.semiBold },
   activitySubtitle: { marginTop: 2, fontFamily: fonts.regular, fontSize: 16, color: colors.textSecondary },
